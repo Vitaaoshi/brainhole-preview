@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>脑洞预演器 · 五毛特效版</title>
+<style>
+  :root{
+    --green:#35ff8a;
+    --magenta:#ff2bd1;
+    --cyan:#22e6ff;
+    --yellow:#ffe23d;
+    --red:#ff3b30;
+    --ink:#050505;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--ink);color:#e8ffe8;overflow:hidden}
+  body{
+    font-family:"SimHei","Microsoft YaHei","Noto Sans SC",sans-serif;
+    -webkit-font-smoothing:none;
+    cursor:crosshair;
+  }
+  button,input{font-family:inherit}
+
+  /* ============ 屏幕容器 ============ */
+  .screen{position:absolute;inset:0;display:none}
+  .screen.active{display:block}
+
+  /* ============ VHS 全局滤镜层 ============ */
+  .vhs-scanlines{
+    position:fixed;inset:0;z-index:900;pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,.28) 0px,
+      rgba(0,0,0,.28) 2px,
+      rgba(255,255,255,.02) 2px,
+      rgba(255,255,255,.02) 4px
+    );
+    animation:scanRoll 9s linear infinite;
+    mix-blend-mode:multiply;
+  }
+  @keyframes scanRoll{
+    from{background-position-y:0}
+    to{background-position-y:120px}
+  }
+  .vhs-noise{
+    position:fixed;inset:-20%;z-index:901;pointer-events:none;opacity:.09;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.6'/></svg>");
+    animation:noiseJitter .18s steps(3) infinite;
+  }
+  @keyframes noiseJitter{
+    0%{transform:translate(0,0)}
+    33%{transform:translate(-6px,4px)}
+    66%{transform:translate(5px,-7px)}
+    100%{transform:translate(0,0)}
+  }
+  .vhs-vignette{
+    position:fixed;inset:0;z-index:902;pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,.55) 100%);
+  }
+  #vhs-glitch{
+    position:fixed;inset:0;z-index:903;pointer-events:none;display:none;
+    background:linear-gradient(to bottom,
+      transparent 0%, rgba(255,255,255,.06) 42%,
+      rgba(255,43,209,.22) 44%, rgba(34,230,255,.22) 46%,
+      rgba(255,255,255,.08) 48%, transparent 56%);
+    mix-blend-mode:screen;
+  }
+  #vhs-glitch.on{display:block;animation:glitchBand .18s steps(2) 1}
+  @keyframes glitchBand{
+    0%{transform:translateY(0) skewX(0)}
+    40%{transform:translateY(-26px) skewX(6deg)}
+    70%{transform:translateY(18px) skewX(-9deg)}
+    100%{transform:translateY(0) skewX(0)}
+  }
+  #flash{
+    position:fixed;inset:0;z-index:904;pointer-events:none;background:#fff;opacity:0;
+  }
+  #flash.on{animation:flashPop .42s ease-out 1}
+  @keyframes flashPop{
+    0%{opacity:0}
+    10%{opacity:.92}
+    100%{opacity:0}
+  }
+
+  /* ============ HUD ============ */
+  #hud{
+    position:fixed;top:14px;right:18px;z-index:910;
+    font-family:"Courier New",monospace;font-size:13px;letter-spacing:.12em;
+    color:var(--green);text-shadow:0 0 8px rgba(53,255,138,.65);
+    text-align:right;line-height:1.5;
+  }
+  #hud-play .tri{animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:.15}}
+  #timecode{opacity:.75}
+
+  /* ============ 待机页 ============ */
+  #screen-idle{
+    background:
+      radial-gradient(circle at 50% 32%, rgba(53,255,138,.09), transparent 58%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px),
+      #050505;
+  }
+  .idle-inner{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;padding:24px;
+    text-align:center;
+  }
+  .cheap-badge{
+    font-family:"Courier New",monospace;font-size:12px;letter-spacing:.35em;
+    color:var(--yellow);border:1px dashed rgba(255,226,61,.55);
+    padding:6px 14px;transform:rotate(-1.5deg);
+    text-shadow:0 0 10px rgba(255,226,61,.5);
+  }
+  .title{
+    font-family:"Impact","Arial Black","SimHei",sans-serif;
+    font-size:clamp(42px,9.2vw,108px);
+    line-height:.95;letter-spacing:.05em;color:#fff;
+    transform:skewX(-4deg);
+    text-shadow:
+      4px 0 rgba(255,59,48,.9),
+      -4px 0 rgba(34,230,255,.9),
+      0 0 28px rgba(53,255,138,.45),
+      0 6px 0 #000;
+    animation:titleWobble 5.5s ease-in-out infinite;
+  }
+  @keyframes titleWobble{
+    0%,100%{transform:skewX(-4deg) rotate(-.6deg)}
+    50%{transform:skewX(-4deg) rotate(.6deg) translateY(-3px)}
+  }
+  .title-en{
+    font-family:"Courier New",monospace;font-size:clamp(10px,1.5vw,14px);
+    letter-spacing:.5em;color:rgba(232,255,232,.42);margin-top:-10px;
+  }
+  .idle-form{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;margin-top:8px}
+  #idea-input{
+    width:min(580px,88vw);padding:15px 18px;
+    background:#0b120b;border:2px solid var(--green);border-radius:0;
+    color:#dfffe9;font-size:16px;letter-spacing:.02em;outline:none;
+    box-shadow:0 0 0 3px #000, 0 0 22px rgba(53,255,138,.22), inset 0 0 18px rgba(0,0,0,.9);
+    transition:box-shadow .15s;
+  }
+  #idea-input::placeholder{color:rgba(53,255,138,.42)}
+  #idea-input:focus{box-shadow:0 0 0 3px #000, 0 0 34px rgba(53,255,138,.55), inset 0 0 18px rgba(0,0,0,.9)}
+  #idea-input.shake{animation:shake .38s ease-in-out 1;border-color:var(--red)}
+  @keyframes shake{
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-9px)}
+    40%{transform:translateX(8px)}
+    60%{transform:translateX(-6px)}
+    80%{transform:translateX(4px)}
+  }
+  .hint-line{font-size:12px;color:rgba(232,255,232,.4);letter-spacing:.08em}
+  .hint-line b{color:var(--magenta);font-weight:400}
+
+  /* ============ 放映厅（历史烂片） ============ */
+  .theater{width:min(760px,92vw);margin-top:2px;text-align:left}
+  .theater[hidden]{display:none}
+  .theater-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    font-family:"Courier New",monospace;font-size:10px;letter-spacing:.24em;
+    color:rgba(232,255,232,.42);padding-bottom:6px;
+    border-bottom:1px dashed rgba(53,255,138,.22);margin-bottom:8px;
+  }
+  #theater-clear{
+    background:none;border:0;padding:0;cursor:pointer;
+    font-family:inherit;font-size:10px;letter-spacing:.18em;color:rgba(255,43,209,.7);
+  }
+  #theater-clear:hover{color:var(--magenta);text-shadow:0 0 10px rgba(255,43,209,.6)}
+  .theater-list{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+  .film-card{
+    flex:0 0 auto;width:168px;text-align:left;cursor:pointer;
+    background:#0a120a;border:1px solid rgba(53,255,138,.28);
+    padding:7px 9px 8px;color:#dfffe9;
+    display:flex;flex-direction:column;gap:3px;
+    transition:transform .12s,border-color .12s,box-shadow .12s;
+  }
+  .film-card:hover{transform:translateY(-2px);border-color:var(--yellow);
+    box-shadow:0 0 18px rgba(255,226,61,.28)}
+  .film-card:active{transform:translateY(0)}
+  .fc-top{display:flex;align-items:baseline;justify-content:space-between}
+  .fc-score{
+    font-family:"Impact","Arial Black",sans-serif;font-size:21px;line-height:1;
+    color:var(--yellow);text-shadow:2px 2px 0 #3a0000;
+  }
+  .fc-stars{font-size:9px;letter-spacing:.06em;color:rgba(255,226,61,.65)}
+  .fc-idea{
+    font-size:11px;line-height:1.45;color:rgba(232,255,232,.84);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .fc-meta{
+    font-family:"Courier New",monospace;font-size:9px;letter-spacing:.06em;
+    color:rgba(53,255,138,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  #start-btn{
+    position:relative;padding:16px 46px;font-size:clamp(17px,2.2vw,22px);
+    font-weight:700;letter-spacing:.16em;color:#04120a;background:var(--green);
+    border:0;cursor:pointer;transform:skewX(-8deg);
+    box-shadow:7px 7px 0 #063, 0 0 30px rgba(53,255,138,.45);
+    transition:transform .08s, box-shadow .08s, filter .15s;
+  }
+  #start-btn:hover{filter:brightness(1.12);box-shadow:9px 9px 0 #063, 0 0 46px rgba(53,255,138,.7)}
+  #start-btn:active{transform:skewX(-8deg) translate(5px,5px);box-shadow:2px 2px 0 #063}
+  #start-btn:disabled{filter:grayscale(.7) brightness(.6);cursor:not-allowed}
+
+  .idle-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+  #roll-btn{
+    padding:14px 22px;font-size:15px;font-weight:700;letter-spacing:.12em;
+    color:var(--yellow);background:#120f04;cursor:pointer;
+    border:2px dashed rgba(255,226,61,.65);transform:skewX(-8deg);
+    box-shadow:5px 5px 0 #000, 0 0 18px rgba(255,226,61,.18);
+    transition:transform .08s, box-shadow .08s, filter .12s;
+  }
+  #roll-btn:hover{filter:brightness(1.2);box-shadow:5px 5px 0 #000, 0 0 28px rgba(255,226,61,.45)}
+  #roll-btn:active{transform:skewX(-8deg) translate(3px,3px);box-shadow:1px 1px 0 #000}
+  #roll-btn:disabled{filter:grayscale(.6) brightness(.6);cursor:not-allowed}
+  #idea-input.rolled{animation:rollFlash .52s steps(2) 1}
+  @keyframes rollFlash{
+    0%{background:#1b2c1b;border-color:var(--yellow);
+       box-shadow:0 0 0 3px #000,0 0 46px rgba(255,226,61,.85)}
+    50%{background:#2a1a04;border-color:var(--yellow)}
+    100%{background:#0b120b}
+  }
+
+  .marquee{
+    position:absolute;left:0;right:0;bottom:0;height:30px;overflow:hidden;
+    background:#0a0a0a;border-top:1px solid rgba(53,255,138,.25);
+    display:flex;align-items:center;
+  }
+  .marquee span{
+    white-space:nowrap;font-size:12px;letter-spacing:.22em;color:rgba(53,255,138,.7);
+    animation:marquee 22s linear infinite;padding-left:100%;
+  }
+  @keyframes marquee{to{transform:translateX(-100%)}}
+  .corner-note{
+    position:absolute;left:18px;bottom:44px;font-family:"Courier New",monospace;
+    font-size:11px;letter-spacing:.08em;color:rgba(232,255,232,.3);line-height:1.7;
+  }
+
+  /* ============ 假加载页 ============ */
+  #screen-loading{background:#050505}
+  .loading-inner{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:20px;padding:24px;text-align:center;
+  }
+  .cassette{
+    width:150px;height:94px;border:3px solid var(--green);border-radius:6px;
+    background:#0a130c;position:relative;
+    box-shadow:0 0 26px rgba(53,255,138,.25), inset 0 0 20px #000;
+    display:flex;align-items:center;justify-content:space-around;padding:0 12px;
+  }
+  .cassette::after{
+    content:"VHS · T-120";position:absolute;bottom:4px;left:0;right:0;
+    text-align:center;font-family:"Courier New",monospace;font-size:9px;
+    letter-spacing:.18em;color:rgba(53,255,138,.5);
+  }
+  .reel{
+    width:44px;height:44px;border-radius:50%;
+    border:3px solid rgba(53,255,138,.8);
+    border-top-color:transparent;border-right-color:transparent;
+    animation:spin 1.1s linear infinite;
+  }
+  .reel:nth-child(2){animation-duration:.78s;animation-direction:reverse}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loading-text{
+    font-size:clamp(14px,2vw,18px);letter-spacing:.12em;color:var(--yellow);
+    min-height:1.5em;text-shadow:0 0 12px rgba(255,226,61,.45);
+  }
+  .bar-track{
+    width:min(460px,80vw);height:16px;background:#0b120b;
+    border:2px solid rgba(53,255,138,.6);padding:2px;
+  }
+  #loading-bar{
+    height:100%;width:0%;background:repeating-linear-gradient(
+      90deg, var(--green) 0 10px, #1c8f4c 10px 20px
+    );transition:width .12s linear;
+    box-shadow:0 0 14px rgba(53,255,138,.5);
+  }
+  .loading-note{font-family:"Courier New",monospace;font-size:11px;color:rgba(232,255,232,.32);letter-spacing:.1em}
+
+  /* ============ 预演页 ============ */
+  #screen-preview{background:#000;overflow:hidden}
+  #stage{position:absolute;inset:0;overflow:hidden;background:#040404}
+  #stage.shake{animation:camShake .38s steps(2) 1}
+  @keyframes camShake{
+    0%{transform:translate(0,0)}
+    20%{transform:translate(-7px,4px) rotate(.3deg)}
+    45%{transform:translate(6px,-6px) rotate(-.4deg)}
+    70%{transform:translate(-4px,3px)}
+    100%{transform:translate(0,0)}
+  }
+
+  #title-card{
+    position:absolute;inset:0;z-index:5;display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    background:radial-gradient(circle at 50% 50%, #2a0505 0%, #000 72%);
+    text-align:center;padding:24px;
+  }
+  #title-card.show{display:flex}
+  #title-card .tc-kicker{
+    font-family:"Courier New",monospace;font-size:12px;letter-spacing:.42em;
+    color:rgba(255,226,61,.75);
+  }
+  #title-idea{
+    font-family:"Impact","Arial Black","SimHei",sans-serif;
+    font-size:clamp(26px,6.4vw,74px);line-height:1.12;color:#ffe23d;
+    background:linear-gradient(180deg,#fff8c9,#ffcc00 42%,#c96a00 100%);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 4px 0 #5a1400) drop-shadow(0 0 22px rgba(255,180,0,.5));
+    transform:scale(.9) rotate(-1.2deg);
+    animation:titleSlam .5s cubic-bezier(.2,1.6,.4,1) forwards;
+    max-width:92vw;
+  }
+  @keyframes titleSlam{
+    0%{transform:scale(2.4) rotate(-6deg);opacity:0}
+    60%{transform:scale(.94) rotate(-.6deg);opacity:1}
+    100%{transform:scale(1) rotate(-1.2deg);opacity:1}
+  }
+  #title-card .tc-sub{
+    font-size:clamp(12px,1.6vw,15px);letter-spacing:.3em;color:rgba(255,255,255,.62);
+    border-top:1px solid rgba(255,226,61,.4);border-bottom:1px solid rgba(255,226,61,.4);
+    padding:7px 20px;
+  }
+
+  #end-card{
+    position:absolute;inset:0;z-index:6;display:none;
+    flex-direction:column;gap:18px;
+    align-items:center;justify-content:center;background:rgba(0,0,0,.92);
+  }
+  #end-card.show{display:flex}
+  #end-card .stamp{
+    font-family:"Impact","SimHei",sans-serif;font-size:clamp(44px,11vw,120px);
+    color:var(--red);border:8px solid var(--red);padding:8px 34px;
+    letter-spacing:.1em;transform:rotate(-7deg) scale(1.7);opacity:0;
+    text-shadow:0 0 24px rgba(255,59,48,.5);
+    box-shadow:0 0 40px rgba(255,59,48,.25), inset 0 0 30px rgba(255,59,48,.15);
+    animation:stampDrop .42s cubic-bezier(.2,1.4,.4,1) forwards;
+  }
+  #end-card .stamp-sub{
+    font-family:"Courier New",monospace;font-size:clamp(11px,1.6vw,14px);
+    letter-spacing:.28em;color:rgba(255,226,61,.62);
+    opacity:0;animation:subIn .3s ease-out .5s forwards;
+  }
+  @keyframes stampDrop{
+    0%{transform:rotate(-19deg) scale(2.6);opacity:0}
+    55%{transform:rotate(-6deg) scale(.94);opacity:1}
+    72%{transform:rotate(-8deg) scale(1.04)}
+    100%{transform:rotate(-7deg) scale(1);opacity:1}
+  }
+
+  #subtitle-bar{
+    position:absolute;left:0;right:0;bottom:0;z-index:7;
+    background:rgba(0,0,0,.86);padding:11px 20px;min-height:58px;
+    display:none;align-items:center;justify-content:center;
+    border-top:1px solid rgba(255,255,255,.08);
+  }
+  #subtitle-bar.show{display:flex}
+
+  /* ============ 本片主角芯片 ============ */
+  #cast-chip{
+    position:absolute;left:16px;bottom:64px;z-index:6;
+    font-family:"Courier New",monospace;font-size:12px;letter-spacing:.07em;
+    padding:5px 10px;color:var(--acc,var(--green));
+    background:rgba(0,0,0,.55);border:1px solid currentColor;
+    box-shadow:0 0 14px rgba(0,0,0,.8);
+    opacity:0;transform:translateY(6px);pointer-events:none;
+    transition:opacity .25s,transform .25s;
+  }
+  #screen-preview.active #cast-chip{opacity:.92;transform:translateY(0)}
+  #cast-chip.pop{animation:chipPop .46s cubic-bezier(.2,1.6,.4,1) 1}
+  @keyframes chipPop{
+    0%{transform:translateY(0) scale(1)}
+    40%{transform:translateY(-5px) scale(1.09)}
+    100%{transform:translateY(0) scale(1)}
+  }
+
+  /* ============ 场记板 ============ */
+  #scene-tag{
+    position:absolute;left:16px;top:16px;z-index:6;
+    font-family:"Courier New",monospace;font-size:11px;letter-spacing:.16em;
+    color:rgba(232,255,232,.6);background:rgba(0,0,0,.55);
+    border-left:2px solid var(--acc,var(--green));padding:4px 9px;
+    opacity:0;transition:opacity .2s;
+  }
+  #screen-preview.active #scene-tag{opacity:.9}
+  #subtitle-text{
+    font-size:clamp(15px,2.2vw,25px);line-height:1.4;color:#ffe23d;
+    text-align:center;letter-spacing:.03em;
+    text-shadow:2px 2px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;
+    animation:subIn .16s steps(2) 1;
+  }
+  @keyframes subIn{
+    0%{opacity:0;transform:translateY(4px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
+
+  /* ============ 评分页 ============ */
+  #screen-rating{background:#120202;overflow:auto}
+  .curtain{
+    position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,
+      #4a0505 0 26px, #2c0202 26px 38px, #5c0808 38px 64px);
+    opacity:.85;
+  }
+  .curtain::after{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 50% 40%, rgba(0,0,0,.1), rgba(0,0,0,.85) 78%);
+  }
+  .rating-wrap{
+    position:relative;z-index:2;min-height:100%;
+    display:flex;align-items:center;justify-content:center;padding:26px 16px;
+  }
+  .rating-card{
+    width:min(620px,94vw);background:#0b0b0b;
+    border:3px solid var(--yellow);padding:26px 26px 22px;
+    box-shadow:0 0 0 6px #000, 0 0 44px rgba(255,226,61,.18);
+    transform:rotate(-.5deg);
+    animation:cardIn .36s cubic-bezier(.2,1.3,.4,1) both;
+    position:relative;
+  }
+  @keyframes cardIn{
+    0%{transform:rotate(-4deg) scale(.86);opacity:0}
+    100%{transform:rotate(-.5deg) scale(1);opacity:1}
+  }
+  .rating-card::before{
+    content:"机密 · 请勿外传";position:absolute;top:-12px;left:18px;
+    font-family:"Courier New",monospace;font-size:10px;letter-spacing:.22em;
+    background:var(--yellow);color:#000;padding:2px 8px;
+  }
+  .rc-head{
+    font-size:12px;letter-spacing:.3em;color:rgba(255,226,61,.85);
+    border-bottom:1px dashed rgba(255,226,61,.35);padding-bottom:10px;
+  }
+  .rc-movie{
+    margin-top:12px;font-size:clamp(15px,2.4vw,20px);color:#fff;line-height:1.45;
+    word-break:break-word;
+  }
+  .rc-movie b{color:var(--green);font-weight:400}
+  .rc-score-row{
+    display:flex;align-items:baseline;gap:10px;margin:14px 0 4px;
+  }
+  #rating-score{
+    font-family:"Impact","Arial Black",sans-serif;
+    font-size:clamp(56px,12vw,86px);line-height:.9;color:var(--red);
+    text-shadow:3px 3px 0 #000, 0 0 26px rgba(255,59,48,.55);
+    transform:skewX(-6deg);
+  }
+  .rc-max{font-family:"Courier New",monospace;font-size:20px;color:rgba(255,255,255,.45)}
+  .rc-tag{
+    margin-left:auto;font-size:12px;letter-spacing:.14em;color:#000;
+    background:var(--yellow);padding:3px 10px;transform:rotate(2deg);
+  }
+  #rating-stars{
+    font-size:20px;color:var(--yellow);letter-spacing:.16em;
+    text-shadow:0 0 12px rgba(255,226,61,.5);margin-bottom:14px;
+  }
+  .rc-quote{
+    border-left:4px solid var(--magenta);padding:8px 0 8px 14px;
+    font-size:clamp(14px,2vw,17px);line-height:1.6;color:#ffe9e9;
+    background:linear-gradient(90deg, rgba(255,43,209,.09), transparent 70%);
+  }
+  .rc-quote::before{content:"“";color:var(--magenta)}
+  .rc-quote::after{content:"”";color:var(--magenta)}
+  .rc-award{
+    margin-top:12px;font-size:13px;letter-spacing:.1em;color:var(--cyan);
+    text-shadow:0 0 12px rgba(34,230,255,.45);
+  }
+  .rc-budget{
+    margin-top:10px;font-family:"Courier New",monospace;font-size:12px;
+    letter-spacing:.06em;color:rgba(232,255,232,.55);
+  }
+  .rc-incident{
+    margin-top:12px;padding-top:10px;font-size:12px;line-height:1.6;
+    letter-spacing:.04em;color:rgba(255,255,255,.46);
+    border-top:1px dashed rgba(255,255,255,.14);
+  }
+  .rc-teaser{
+    margin-top:6px;font-size:13px;line-height:1.6;
+    letter-spacing:.05em;color:#ffb0d9;
+    text-shadow:0 0 10px rgba(255,43,209,.35);
+  }
+  .rc-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+  .rc-actions button{
+    flex:1 1 180px;padding:13px 16px;font-size:15px;font-weight:700;letter-spacing:.1em;
+    cursor:pointer;border:0;transform:skewX(-6deg);
+    transition:transform .08s,box-shadow .08s,filter .12s;
+  }
+  #btn-reroll{background:var(--green);color:#04120a;box-shadow:5px 5px 0 #063}
+  #btn-new{background:#1a1a1a;color:var(--yellow);box-shadow:5px 5px 0 #000;border:2px solid rgba(255,226,61,.55)}
+  .rc-actions button:hover{filter:brightness(1.12)}
+  .rc-actions button:active{transform:skewX(-6deg) translate(4px,4px);box-shadow:1px 1px 0 #000}
+  .rc-foot{
+    margin-top:16px;font-size:10px;letter-spacing:.18em;color:rgba(255,255,255,.28);
+    font-family:"Courier New",monospace;
+  }
+
+  /* ============ 响应式 ============ */
+  @media (max-width:620px){
+    #hud{font-size:11px;top:10px;right:12px}
+    .idle-inner{gap:16px;padding:18px}
+    #start-btn{padding:14px 30px}
+    #roll-btn{padding:12px 16px;font-size:14px}
+    .corner-note{display:none}
+    .rating-card{padding:20px 18px}
+    .rc-max{font-size:16px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .vhs-noise,.vhs-scanlines,.title,.title-en,.cassette .reel{animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- 全局 VHS 滤镜 -->
+<div class="vhs-scanlines"></div>
+<div class="vhs-noise"></div>
+<div class="vhs-vignette"></div>
+<div id="vhs-glitch"></div>
+<div id="flash"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-play">PLAY <span class="tri">▶</span></div>
+  <div id="timecode">00:00:00</div>
+</div>
+
+<!-- ① 待机页 -->
+<section id="screen-idle" class="screen active">
+  <div class="idle-inner">
+    <div class="cheap-badge">五 毛 特 效 · 荣 誉 出 品</div>
+    <h1 class="title">脑洞预演器</h1>
+    <div class="title-en">BRAINHOLE PREVIEW SYSTEM v0.5</div>
+    <div class="idle-form">
+      <input id="idea-input" type="text" maxlength="60" autocomplete="off" spellcheck="false"
+             placeholder="我变成奥特曼在公司打卡上班">
+      <div class="idle-actions">
+        <button id="start-btn" type="button">▶ 开始预演</button>
+        <button id="roll-btn" type="button">🎲 摇个脑洞</button>
+      </div>
+      <div class="hint-line">建议输入一句话脑洞 · <b>本系统不保证任何逻辑</b></div>
+      <div class="theater" id="theater" hidden>
+        <div class="theater-head">
+          <span>放映厅 · 历史烂片</span>
+          <button id="theater-clear" type="button">清空片库</button>
+        </div>
+        <div class="theater-list" id="theater-list"></div>
+      </div>
+    </div>
+  </div>
+  <div class="corner-note">
+    SP · 预演中心 · 内部资料<br>
+    特效预算：¥0.50（含税）
+  </div>
+  <div class="marquee"><span>本片含有大量廉价特效 心理承受能力弱者慎入 · 建议佩戴墨镜观看 · 特效经费已严重超支 · 导演已跑路 · 请勿模仿片中动作</span></div>
+</section>
+
+<!-- ② 假加载页 -->
+<section id="screen-loading" class="screen">
+  <div class="loading-inner">
+    <div class="cassette">
+      <div class="reel"></div>
+      <div class="reel"></div>
+    </div>
+    <div id="loading-text"></div>
+    <div class="bar-track"><div id="loading-bar"></div></div>
+    <div class="loading-note" id="loading-note">PLEASE BE PATIENT · 1998</div>
+  </div>
+</section>
+
+<!-- ③ 预演页 -->
+<section id="screen-preview" class="screen">
+  <div id="stage"></div>
+  <div id="cast-chip"></div>
+  <div id="scene-tag"></div>
+
+  <div id="title-card">
+    <div class="tc-kicker" id="title-kicker">五毛特效 荣誉呈现</div>
+    <div id="title-idea"></div>
+    <div class="tc-sub" id="title-sub">一 部 不 可 能 获 奖 的 电 影</div>
+  </div>
+
+  <div id="end-card">
+    <div class="stamp">全剧终</div>
+    <div class="stamp-sub" id="end-sub">本 片 无 彩 蛋 · 请 自 行 脑 补</div>
+  </div>
+
+  <div id="subtitle-bar">
+    <span id="subtitle-text"></span>
+  </div>
+</section>
+
+<!-- ④ 评分页 -->
+<section id="screen-rating" class="screen">
+  <div class="curtain"></div>
+  <div class="rating-wrap">
+    <div class="rating-card">
+      <div class="rc-head">五毛影评人协会 · 终 审 报 告</div>
+      <div class="rc-movie">本片：《<b id="rating-idea"></b>》</div>
+      <div class="rc-score-row">
+        <span id="rating-score">2.7</span><span class="rc-max">/ 10</span>
+        <span class="rc-tag">已认证烂片</span>
+      </div>
+      <div id="rating-stars">★★☆☆☆</div>
+      <div class="rc-quote" id="rating-review"></div>
+      <div class="rc-award" id="rating-award"></div>
+      <div class="rc-budget">
+        特效经费：¥0.50 · <span id="rating-budget-note">已超支</span>
+      </div>
+      <div class="rc-incident" id="rating-incident">拍摄事故：道具楼被风吹倒，重拍 1 次。</div>
+      <div class="rc-teaser" id="rating-teaser">下集预告：本脑洞的暑假。</div>
+      <div class="rc-actions">
+        <button id="btn-reroll" type="button">再来一次（同脑洞重roll）</button>
+        <button id="btn-new" type="button">换个脑洞</button>
+      </div>
+      <div class="rc-foot">本报告由自动打分机生成 · 不构成任何观影建议 · 最终解释权归导演所有</div>
+    </div>
+  </div>
+</section>
+
+<!-- 模块（彼此独立，均可单独替换） -->
+<script src="js/audio.js"></script>
+<script src="js/narration.js"></script>
+<script src="js/vhs.js"></script>
+<script src="js/hints.js"></script>
+<script src="js/scenes-a.js"></script>
+<script src="js/scenes-b.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
